@@ -144,9 +144,11 @@ async def on_text(message: Message) -> None:
     )
 
     inventory_lines = [
-        f"- {item['name']}: {service.fmt_qty(item['qty'], item['unit'])}"
+        f"- {item['name']}: " + (
+            service.fmt_qty(item["qty"], item["unit"])
+            if item["qty"] is None or item["qty"] > 0 else "кончилось"
+        )
         for item in ctx.database.list_inventory()
-        if item["qty"] is None or item["qty"] > 0
     ]
     parsed = await ctx.parser.parse(
         text=text, author=author,
