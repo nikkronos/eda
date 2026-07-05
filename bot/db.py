@@ -136,6 +136,22 @@ class Database:
         self.conn.commit()
         return cur.rowcount > 0
 
+    def update_last_meal(self, description: str, satiety: float | None,
+                         taste: float | None, notes: str | None) -> bool:
+        """Поправка: обновляет последнюю запись; пустые поля не затирают старые."""
+        row = self.conn.execute("SELECT id FROM meals ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:
+            return False
+        sets, params = ["description = ?"], [description]
+        for column, value in (("satiety", satiety), ("taste", taste), ("notes", notes)):
+            if value is not None:
+                sets.append(f"{column} = ?")
+                params.append(value)
+        params.append(row["id"])
+        self.conn.execute(f"UPDATE meals SET {', '.join(sets)} WHERE id = ?", params)
+        self.conn.commit()
+        return True
+
     # --- inventory ---
 
     def get_item(self, name: str) -> sqlite3.Row | None:

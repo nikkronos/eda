@@ -42,6 +42,29 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(self.db.get_item("спагетти")["qty"], 500)
         self.assertEqual(self.db.last_meals(5), [])
 
+    def test_meal_correction_updates_last_entry_without_ops(self):
+        parsed = {"kind": "meal",
+                  "meal": {"description": "обед", "satiety": 4, "taste": 3,
+                           "notes": "не хватает соуса"}}
+        service.apply_parsed(self.db, parsed, "Никита", raw_id=1)
+        correction = {"kind": "meal",
+                      "meal": {"description": "обед", "satiety": 3, "taste": 3,
+                               "is_correction": True}}
+        action = service.apply_parsed(self.db, correction, "Никита", raw_id=2)
+        self.assertIn("обновлена", action.reply)
+        meals = self.db.last_meals(5)
+        self.assertEqual(len(meals), 1)          # не дубль, а обновление
+        self.assertEqual(meals[0]["satiety"], 3)
+        self.assertEqual(meals[0]["notes"], "не хватает соуса")  # заметка не затёрта
+
+    def test_meal_correction_with_empty_diary_falls_back_to_insert(self):
+        correction = {"kind": "meal",
+                      "meal": {"description": "обед", "satiety": 3,
+                               "is_correction": True}}
+        action = service.apply_parsed(self.db, correction, "Никита", raw_id=2)
+        self.assertEqual(action.kind, "meal")
+        self.assertEqual(len(self.db.last_meals(5)), 1)
+
     def test_meal_without_ops_is_silent_reaction_only(self):
         parsed = {"kind": "meal", "meal": {"description": "банан", "satiety": 3}}
         action = service.apply_parsed(self.db, parsed, "Никита", raw_id=1)

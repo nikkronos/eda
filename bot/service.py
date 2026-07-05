@@ -89,6 +89,16 @@ def apply_parsed(database: db_module.Database, parsed: dict, author: str,
         description = (meal.get("description") or "").strip()
         if not description:
             return Action(kind="chatter")
+        if meal.get("is_correction") and database.update_last_meal(
+            description, meal.get("satiety"), meal.get("taste"), meal.get("notes")
+        ):
+            updated = database.last_meals(1)[0]
+            return Action(
+                kind="meal", reaction="✍",
+                reply="✏️ Запись дневника обновлена: "
+                      f"сытость {fmt_score(updated['satiety'])} · "
+                      f"вкус {fmt_score(updated['taste'])}",
+            )
         meal_id = database.add_meal(
             description=description,
             satiety=meal.get("satiety"),
