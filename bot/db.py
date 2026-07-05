@@ -197,7 +197,8 @@ class Database:
             )
             changes.append({
                 "name": canonical, "op": action,
-                "qty_before": qty_before, "qty_after": new_qty, "unit": new_unit,
+                "qty_before": qty_before, "unit_before": unit_before,
+                "qty_after": new_qty, "unit": new_unit,
             })
         self.conn.commit()
         return batch_id, changes

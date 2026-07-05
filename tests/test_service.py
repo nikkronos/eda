@@ -115,12 +115,19 @@ class ServiceTest(unittest.TestCase):
     def test_describe_changes_transition(self):
         lines = service.describe_changes([
             {"name": "греча", "op": "subtract", "qty_before": 4, "qty_after": 3,
-             "unit": "пакетик"},
+             "unit": "пакетик", "unit_before": "пакетик"},
             {"name": "огурцы", "op": "deplete", "qty_before": 2, "qty_after": 0,
-             "unit": "шт"},
+             "unit": "шт", "unit_before": "шт"},
         ])
         self.assertEqual(lines[0], "греча: 4 пакетик → 3 пакетик")
         self.assertEqual(lines[1], "огурцы: кончилось")
+
+    def test_describe_changes_unit_switch_shows_old_unit(self):
+        lines = service.describe_changes([
+            {"name": "микс овощей", "op": "set", "qty_before": 1, "qty_after": 400,
+             "unit": "г", "unit_before": "уп"},
+        ])
+        self.assertEqual(lines[0], "микс овощей: 1 уп → 400 г")
 
 
 if __name__ == "__main__":
