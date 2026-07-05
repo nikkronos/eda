@@ -52,6 +52,7 @@ class Action:
     reaction: str | None = None        # эмодзи-реакция на сообщение
     reply: str | None = None           # текст ответа (None — молчать)
     undo_batch: str | None = None      # batch_id для кнопки «Отменить»
+    meal_id: int | None = None         # запись дневника, отменяемая вместе с батчем
     pending_id: int | None = None      # id для кнопки «Купил всё»
     lines: list[str] = field(default_factory=list)
 
@@ -88,7 +89,7 @@ def apply_parsed(database: db_module.Database, parsed: dict, author: str,
         description = (meal.get("description") or "").strip()
         if not description:
             return Action(kind="chatter")
-        database.add_meal(
+        meal_id = database.add_meal(
             description=description,
             satiety=meal.get("satiety"),
             taste=meal.get("taste"),
@@ -100,6 +101,7 @@ def apply_parsed(database: db_module.Database, parsed: dict, author: str,
             batch_id, changes = database.apply_ops(ops, reason=f"meal:{raw_id}")
             if changes:
                 action.undo_batch = batch_id
+                action.meal_id = meal_id
                 action.lines = describe_changes(changes)
                 action.reply = "📦 Списано:\n" + "\n".join(
                     f"• {line}" for line in action.lines

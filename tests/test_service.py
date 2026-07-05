@@ -27,6 +27,21 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(self.db.get_item("греча")["qty"], 3)
         self.assertEqual(self.db.last_meals(1)[0]["satiety"], 4)
 
+    def test_meal_undo_removes_diary_entry_too(self):
+        self.db.apply_ops([{"name": "спагетти", "op": "add", "qty": 500, "unit": "г"}], "seed")
+        parsed = {
+            "kind": "meal",
+            "meal": {"description": "спагетти с курицей", "satiety": 5, "taste": 3},
+            "inventory_ops": [{"name": "спагетти", "op": "subtract"}],
+        }
+        action = service.apply_parsed(self.db, parsed, "Никита", raw_id=9)
+        self.assertIsNotNone(action.meal_id)
+        # пользователь жмёт «Отменить»: откатываются и склад, и дневник
+        self.assertTrue(self.db.undo_batch(action.undo_batch))
+        self.assertTrue(self.db.delete_meal(action.meal_id))
+        self.assertEqual(self.db.get_item("спагетти")["qty"], 500)
+        self.assertEqual(self.db.last_meals(5), [])
+
     def test_meal_without_ops_is_silent_reaction_only(self):
         parsed = {"kind": "meal", "meal": {"description": "банан", "satiety": 3}}
         action = service.apply_parsed(self.db, parsed, "Никита", raw_id=1)

@@ -37,13 +37,15 @@ HELP_TEXT = """\
 /bind — привязать этот групповой чат к боту
 /help — эта справка
 
-Если бот ошибся со списанием — под его ответом есть кнопка «Отменить».
-Болтовня и обсуждения игнорируются, на них бот не реагирует."""
+Ошибся в отчёте или бот списал не то — жми «Отменить» под его ответом:
+откатятся и списание, и запись в дневнике. Потом просто пришли исправленный
+отчёт заново. Болтовня и обсуждения игнорируются, на них бот не реагирует."""
 
 
-def undo_keyboard(batch_id: str) -> InlineKeyboardMarkup:
+def undo_keyboard(batch_id: str, meal_id: int | None = None) -> InlineKeyboardMarkup:
+    data = f"undo:{batch_id}" + (f":{meal_id}" if meal_id else "")
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="↩️ Отменить", callback_data=f"undo:{batch_id}")
+        InlineKeyboardButton(text="↩️ Отменить", callback_data=data)
     ]])
 
 
@@ -168,7 +170,7 @@ async def on_text(message: Message) -> None:
     if action.reply:
         keyboard = None
         if action.undo_batch:
-            keyboard = undo_keyboard(action.undo_batch)
+            keyboard = undo_keyboard(action.undo_batch, action.meal_id)
         elif action.pending_id:
             keyboard = buy_keyboard(action.pending_id)
         await message.reply(action.reply, reply_markup=keyboard)
@@ -179,11 +181,17 @@ async def on_undo(callback: CallbackQuery) -> None:
     if callback.from_user.id not in ctx.config.allowed_ids:
         await callback.answer()
         return
-    batch_id = callback.data.split(":", 1)[1]
-    if ctx.database.undo_batch(batch_id):
+    parts = callback.data.split(":")
+    batch_id = parts[1]
+    meal_id = int(parts[2]) if len(parts) > 2 and parts[2] else None
+    undone = ctx.database.undo_batch(batch_id)
+    meal_removed = ctx.database.delete_meal(meal_id) if meal_id else False
+    if undone or meal_removed:
         await callback.answer("Отменено")
         if callback.message:
-            await callback.message.edit_text("↩️ Изменения холодильника отменены.")
+            text = ("↩️ Списание и запись дневника отменены."
+                    if meal_removed else "↩️ Изменения холодильника отменены.")
+            await callback.message.edit_text(text)
     else:
         await callback.answer("Уже отменено", show_alert=False)
 

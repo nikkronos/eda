@@ -131,6 +131,11 @@ class Database:
             "SELECT * FROM meals ORDER BY id DESC LIMIT ?", (n,)
         ).fetchall()
 
+    def delete_meal(self, meal_id: int) -> bool:
+        cur = self.conn.execute("DELETE FROM meals WHERE id = ?", (meal_id,))
+        self.conn.commit()
+        return cur.rowcount > 0
+
     # --- inventory ---
 
     def get_item(self, name: str) -> sqlite3.Row | None:

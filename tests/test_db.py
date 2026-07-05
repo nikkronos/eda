@@ -80,6 +80,12 @@ class DbTest(unittest.TestCase):
         self.assertEqual(meals[1]["satiety"], 4)
         self.assertEqual(meals[1]["notes"], "кислинка")
 
+    def test_delete_meal(self):
+        meal_id = self.db.add_meal("обед", 4, 3, None)
+        self.assertTrue(self.db.delete_meal(meal_id))
+        self.assertEqual(self.db.last_meals(5), [])
+        self.assertFalse(self.db.delete_meal(meal_id))  # повторно — нечего удалять
+
     def test_plans_pick_by_date_then_latest(self):
         self.db.add_plan("Богдан", "план на завтра", "2026-07-06")
         self.db.add_plan("Богдан", "план на сегодня", "2026-07-05")
