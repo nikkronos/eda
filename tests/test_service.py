@@ -129,6 +129,13 @@ class ServiceTest(unittest.TestCase):
         ])
         self.assertEqual(lines[0], "микс овощей: 1 уп → 400 г")
 
+    def test_describe_changes_no_change(self):
+        lines = service.describe_changes([
+            {"name": "приправа", "op": "set", "qty_before": 40, "qty_after": 40,
+             "unit": "г", "unit_before": "г"},
+        ])
+        self.assertEqual(lines[0], "приправа: 40 г — без изменений")
+
 
 if __name__ == "__main__":
     unittest.main()

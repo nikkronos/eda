@@ -67,7 +67,11 @@ def describe_changes(changes: list[dict]) -> list[str]:
             lines.append(f"{name}: +{fmt_qty(after, unit)}")
         elif before is not None and after is not None:
             before_str = fmt_qty(before, ch.get("unit_before") or unit)
-            lines.append(f"{name}: {before_str} → {fmt_qty(after, unit)}")
+            after_str = fmt_qty(after, unit)
+            if before_str == after_str:
+                lines.append(f"{name}: {after_str} — без изменений")
+            else:
+                lines.append(f"{name}: {before_str} → {after_str}")
         else:
             lines.append(f"{name}: {fmt_qty(after, unit)}")
     return lines
