@@ -1,0 +1,132 @@
+"""LLM-разбор свободных сообщений в структуру (Claude Haiku, structured outputs)."""
+
+import json
+import logging
+
+import anthropic
+
+log = logging.getLogger(__name__)
+
+MAX_MESSAGE_CHARS = 3000
+
+SYSTEM_PROMPT = """\
+Ты — парсер сообщений кулинарного телеграм-чата. В чате двое: Никита (учится \
+готовить, отчитывается о еде) и Богдан (повар, даёт планы готовки и списки закупок).
+
+Разбери одно сообщение и верни JSON по схеме.
+
+kind:
+- "meal" — автор поел / приготовил и описывает еду или оценки (сытость, вкус).
+- "plan" — инструкция или план готовки («на завтра…», рецепт с шагами, что приготовить).
+- "shopping_list" — список продуктов к покупке.
+- "inventory" — прямое изменение холодильника: купил(а), кончилось, «добавь…», «осталось N».
+- "chatter" — всё остальное: болтовня, вопросы, обсуждение, реакции.
+
+Правила:
+- Оценки вида «4/5», «4,5/5» → числа 0–5. «сытость X» → meal.satiety, «вкус Y» → meal.taste.
+- Для "meal" заполни inventory_ops — что списать из холодильника исходя из съеденного.
+  Сопоставляй с переданным списком холодильника и используй ТОЧНЫЕ имена из него.
+  Порции оценивай консервативно (греча/макароны — 1 пакетик или порция, яйца — 2 шт).
+  Если подходящей позиции в холодильнике нет — операцию не создавай.
+- Для "shopping_list": inventory_ops = позиции списка, op="add", количество из текста
+  («огурцы 3/4 штуки» → qty 3). Эти операции применятся ПОСЛЕ покупки, по кнопке.
+- Для "inventory": кончилось → "deplete", купил/принёс → "add", осталось N → "set".
+- Для "plan": plan.text — суть плана без потерь (шаги сохраняй), plan.date_for —
+  дата ISO (YYYY-MM-DD), если однозначна из текста и текущей даты, иначе null.
+- Единицы: шт, уп, г, кг, мл, л, пакетик, порция, банка. Не уверен — null.
+- Сомневаешься в kind — выбирай "chatter": сообщение всё равно сохранится.
+"""
+
+RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind"],
+    "properties": {
+        "kind": {
+            "type": "string",
+            "enum": ["meal", "plan", "shopping_list", "inventory", "chatter"],
+        },
+        "meal": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["description"],
+            "properties": {
+                "description": {"type": "string"},
+                "satiety": {"type": "number"},
+                "taste": {"type": "number"},
+                "notes": {"type": "string"},
+            },
+        },
+        "inventory_ops": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["name", "op"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "op": {"type": "string", "enum": ["add", "subtract", "set", "deplete"]},
+                    "qty": {"type": "number"},
+                    "unit": {"type": "string"},
+                },
+            },
+        },
+        "plan": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["text"],
+            "properties": {
+                "text": {"type": "string"},
+                "date_for": {"type": "string"},
+            },
+        },
+    },
+}
+
+
+def build_user_prompt(text: str, author: str, now_local: str,
+                      inventory_lines: list[str]) -> str:
+    inventory = "\n".join(inventory_lines) if inventory_lines else "(пусто)"
+    return (
+        f"Дата и время (локальные): {now_local}\n"
+        f"Автор сообщения: {author}\n\n"
+        f"Холодильник сейчас:\n{inventory}\n\n"
+        f"Сообщение:\n{text[:MAX_MESSAGE_CHARS]}"
+    )
+
+
+class Parser:
+    def __init__(self, api_key: str, model: str = "claude-haiku-4-5"):
+        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+        self.model = model
+
+    async def parse(self, text: str, author: str, now_local: str,
+                    inventory_lines: list[str]) -> dict | None:
+        """Возвращает dict по RESULT_SCHEMA или None при ошибке (сообщение не теряется)."""
+        try:
+            response = await self.client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                system=SYSTEM_PROMPT,
+                output_config={"format": {"type": "json_schema", "schema": RESULT_SCHEMA}},
+                messages=[{
+                    "role": "user",
+                    "content": build_user_prompt(text, author, now_local, inventory_lines),
+                }],
+            )
+        except anthropic.RateLimitError:
+            log.warning("LLM rate limit")
+            return None
+        except anthropic.APIStatusError as exc:
+            log.error("LLM API error %s: %s", exc.status_code, exc.message)
+            return None
+        except anthropic.APIConnectionError:
+            log.error("LLM connection error")
+            return None
+
+        raw = next((b.text for b in response.content if b.type == "text"), "")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            log.error("LLM вернул не-JSON: %.200s", raw)
+            return None
