@@ -43,6 +43,13 @@ class DbTest(unittest.TestCase):
         self.assertEqual(changes, [])
         self.assertIsNone(self.db.get_item("лобстер"))
 
+    def test_subtract_mismatched_unit_degrades_to_portion(self):
+        self.db.apply_ops([{"name": "курица", "op": "add", "qty": 400, "unit": "г"}], "t")
+        self.db.apply_ops([{"name": "курица", "op": "subtract", "qty": 1, "unit": "шт"}], "t")
+        item = self.db.get_item("курица")
+        self.assertIsNone(item["qty"])       # не 399: единицы несовместимы → «есть»
+        self.assertEqual(item["unit"], "г")  # единица хранения не перезаписана
+
     def test_subtract_unknown_qty_stays_unknown(self):
         self.db.apply_ops([{"name": "Сыр", "op": "add"}], "t")  # qty неизвестно
         self.assertIsNone(self.db.get_item("сыр")["qty"])

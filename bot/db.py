@@ -197,6 +197,10 @@ class Database:
             if action == "deplete" and not existed:
                 continue
 
+            if action == "subtract" and None not in (qty, unit, unit_before) \
+                    and unit != unit_before:
+                qty = None  # единицы не совпадают («1 шт» из граммов) — списываем «порцию»
+
             if action == "add":
                 new_qty = qty if qty_before is None else (
                     qty_before + qty if qty is not None else qty_before
@@ -208,7 +212,8 @@ class Database:
             else:  # deplete
                 new_qty = 0.0
 
-            new_unit = unit or unit_before
+            # трата не переопределяет единицу хранения
+            new_unit = (unit_before or unit) if action == "subtract" else (unit or unit_before)
             self._write_item(canonical, new_qty, new_unit)
             self.conn.execute(
                 "INSERT INTO inventory_log(batch_id, item_name, existed_before, qty_before, "
